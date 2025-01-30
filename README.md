@@ -50,7 +50,7 @@ To run Snifd locally, follow these steps:
 #### 1. Clone the Repository
 
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/CodeByKalvin/Snifd.git
 cd Snifd
 ```
 
