@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Snifd - Network Guardian</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="banner">CodeByKalvin</div>
+    <h1>Snifd Alerts</h1>
+     <div class="notification-container">
+    </div>
+    <div style="margin-bottom: 10px">
+         <label>Filter IP: </label>
+          <input type="text" id="filterIP" oninput="refreshAlerts()">
+         <label>Sort By: </label>
+        <select id="sortBy" onchange="refreshAlerts()">
+            <option value="last_seen">Last Seen</option>
+            <option value="ip">IP</option>
+            <option value="count">Count</option>
+       </select>
+        <label>Sort Order: </label>
+         <select id="sortOrder" onchange="refreshAlerts()">
+            <option value="asc">Ascending</option>
+             <option value="desc">Descending</option>
+        </select>
+    </div>
+
+    <table id="alertTable">
+        <thead>
+            <tr>
+                <th>IP Address</th>
+                <th>Activity Count</th>
+                <th>Last Seen</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="alertTableBody">
+           <!-- Alerts will be added here by Javascript -->
+        </tbody>
+    </table>
+
+  <div style="width: 600px; margin-top: 20px">
+    <h2>Activity Chart</h2>
+    <canvas id="myChart"></canvas>
+  </div>
+
+    <div style="margin-top: 20px">
+          <h2>Configuration</h2>
+        <form id="configForm">
+            <label>Threshold:</label>
+             <input type="number" name="threshold" value="{{ config.threshold }}">
+            <label>Time Window:</label>
+           <input type="number" name="time_window" value="{{ config.time_window }}">
+            <label>Interface:</label>
+            <input type="text" name="interface" value="{{ config.interface }}">
+           <label>Ports (comma separated)</label>
+            <input type="text" name="ports" value="{{ config.ports | join(',') }}">
+           <button type="submit">Update Config</button>
+       </form>
+   </div>
+
+   <div style="margin-top: 20px">
+        <h2>Alert History</h2>
+       <table id="alertHistoryTable">
+           <thead>
+               <tr>
+                   <th>Time</th>
+                   <th>IP</th>
+                   <th>Message</th>
+               </tr>
+           </thead>
+            <tbody id="alertHistoryBody">
+            </tbody>
+       </table>
+    </div>
+
+    <div style="margin-top: 20px">
+        <h2>Blocked IPs</h2>
+        <table id="blockedIPTable">
+          <thead>
+            <tr>
+              <th>IP Address</th>
+              <th>Blocked Time</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+         <tbody id="blockedIPTableBody"></tbody>
+        </table>
+    </div>
+
+   <script>
+        const chartElement = document.getElementById('myChart');
+        let myChart = new Chart(chartElement);
+
+         const notificationContainer = document.querySelector('.notification-container');
+
+        function displayNotification(message, type) {
+            const notificationDiv = document.createElement('div');
+            notificationDiv.classList.add('notification', type);
+
+            const messageParagraph = document.createElement('p');
+            messageParagraph.textContent = message;
+
+            notificationDiv.appendChild(messageParagraph);
+            notificationContainer.appendChild(notificationDiv);
+
+            // Remove notification after 5 seconds.
+           setTimeout(() => {
+               notificationDiv.remove();
+            }, 5000);
+        }
+        function refreshAlerts() {
+            const filterIP = document.getElementById('filterIP').value;
+            const sortBy = document.getElementById('sortBy').value;
+            const sortOrder = document.getElementById('sortOrder').value;
+
+            const urlParams = new URLSearchParams({
+              filter_ip: filterIP,
+              sort_by: sortBy,
+              sort_order: sortOrder
+            });
+            fetch(`/get_alerts?${urlParams}`)
+              .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Error fetching alerts. HTTP Status: ${response.status}`);
+                   }
+                  return response.json();
+               })
+             .then(data => {
+                    const tableBody = document.getElementById('alertTableBody');
+                    tableBody.innerHTML = '';
+                    data.forEach(alert => {
+                       const row = tableBody.insertRow();
+                      const ipCell = row.insertCell();
+                       const countCell = row.insertCell();
+                       const lastSeenCell = row.insertCell();
+                      const actionCell = row.insertCell();
+                      ipCell.textContent = alert.ip;
+                       countCell.textContent = alert.count;
+                      lastSeenCell.textContent = alert.last_seen;
+                      const blockButton = document.createElement('button');
+                     blockButton.textContent = 'Block IP';
+                     blockButton.onclick = () => {
+                      blockIP(alert.ip);
+                     };
+                     actionCell.appendChild(blockButton);
+                  });
+              })
+              .catch(error => {
+                console.error('Error fetching alerts:', error);
+                 displayNotification(`Error Fetching Alerts ${error}`, "error");
+              });
+        }
+        function refreshChartData() {
+             fetch('/get_chart_data')
+                 .then(response => {
+                    if(!response.ok){
+                        throw new Error(`Error fetching chart data. HTTP Status: ${response.status}`)
+                    }
+                     return response.json()
+                 })
+                .then(data => {
+                    if(myChart){
+                       myChart.destroy();
+                   }
+                    myChart = new Chart(chartElement, {
+                        type: 'line',
+                        data: data
+                    });
+                })
+             .catch(error => {
+                   console.error("Error fetching chart data", error);
+                  displayNotification(`Error Fetching Chart Data ${error}`, "error");
+                });
+       }
+       function refreshAlertHistory() {
+              fetch('/get_alert_history')
+                .then(response => {
+                    if (!response.ok) {
+                         throw new Error(`Error fetching alert history. HTTP Status: ${response.status}`);
+                     }
+                    return response.json();
+                })
+                 .then(data => {
+                    const tableBody = document.getElementById('alertHistoryBody');
+                     tableBody.innerHTML = '';
+                    data.forEach(alert => {
+                       const row = tableBody.insertRow();
+                       const timeCell = row.insertCell();
+                       const ipCell = row.insertCell();
+                       const messageCell = row.insertCell();
+                        timeCell.textContent = alert.timestamp;
+                        ipCell.textContent = alert.source_ip;
+                        messageCell.textContent = alert.message;
+                    });
+                })
+               .catch(error => {
+                   console.error("Error fetching alert history", error);
+                   displayNotification(`Error Fetching Alert History ${error}`, "error");
+               });
+          }
+        function refreshBlockedIps() {
+            fetch('/get_blocked_ips')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Error fetching blocked IPs. HTTP Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                  const tableBody = document.getElementById('blockedIPTableBody');
+                  tableBody.innerHTML = '';
+                 data.forEach(blockedIp => {
+                       const row = tableBody.insertRow();
+                       const ipCell = row.insertCell();
+                       const timeCell = row.insertCell();
+                      const actionCell = row.insertCell();
+                      ipCell.textContent = blockedIp.ip;
+                       timeCell.textContent = blockedIp.time;
+
+                     const unblockButton = document.createElement('button');
+                    unblockButton.textContent = 'Unblock IP';
+                    unblockButton.onclick = () => {
+                       unblockIP(blockedIp.ip);
+                     };
+                     actionCell.appendChild(unblockButton);
+                    });
+                })
+                .catch(error => {
+                    console.error("Error fetching blocked IPs", error);
+                    displayNotification(`Error Fetching Blocked IPs ${error}`, "error");
+                });
+        }
+         function blockIP(ipAddress) {
+            fetch('/block_ip', {
+               method: 'POST',
+                headers: {
+                   'Content-Type': 'application/x-www-form-urlencoded',
+               },
+                 body: 'ip=' + ipAddress,
+             })
+           .then(response => {
+                 if(!response.ok){
+                       throw new Error(`Error blocking ip ${ipAddress}. HTTP status: ${response.status}`);
+                    }
+                  return response.json();
+              })
+              .then(data => {
+                 displayNotification(data.message, "success");
+                  refreshAlerts();
+                  refreshBlockedIps();
+              })
+               .catch(error => {
+                   console.error("Error blocking IP:", error);
+                   displayNotification(`Error Blocking IP ${error}`, "error");
+                });
+        }
+        function unblockIP(ipAddress) {
+           fetch('/unblock_ip', {
+                method: 'POST',
+                 headers: {
+                      'Content-Type': 'application/x-www-form-urlencoded',
+                  },
+                  body: 'ip=' + ipAddress,
+             })
+                .then(response => {
+                    if(!response.ok){
+                        throw new Error(`Error unblocking ip ${ipAddress}. HTTP status: ${response.status}`);
+                     }
+                    return response.json();
+               })
+                .then(data => {
+                  displayNotification(data.message, "success");
+                  refreshBlockedIps();
+               })
+               .catch(error => {
+                   console.error("Error unblocking IP:", error);
+                    displayNotification(`Error Unblocking IP ${error}`, "error");
+                });
+        }
+
+        const configForm = document.getElementById('configForm');
+        configForm.addEventListener('submit', function(event) {
+           event.preventDefault();
+           const formData = new FormData(configForm);
+           fetch('/update_config', {
+              method: 'POST',
+               body: formData
+          })
+          .then(response => {
+                if(!response.ok){
+                    throw new Error(`Error updating config. HTTP Status ${response.status}`);
+                   }
+                  return response.json();
+          })
+           .then(data => {
+              displayNotification(data.message, "success");
+                location.reload();
+           })
+            .catch(error => {
+                  console.error("Error updating config", error);
+                   displayNotification(`Error Updating Config: ${error}`, "error");
+              })
+        });
+
+         // Initial data load and then refresh every 10 seconds
+         refreshAlerts();
+         refreshChartData();
+         refreshBlockedIps();
+         refreshAlertHistory();
+        setInterval(refreshAlerts, 10000);
+         setInterval(refreshChartData, 30000);
+         setInterval(refreshBlockedIps, 30000);
+         setInterval(refreshAlertHistory, 30000)
+    </script>
+</body>
+</html>
