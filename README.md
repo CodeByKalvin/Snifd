@@ -126,14 +126,14 @@ This will launch the web application, which you can access from your browser.
 ```
 snifd/
 │
-├── snifd.py                 # Main Python script for running the web application
+├── snifd.py                # Main Python script for running the web application
 ├── static/
-│   └── style.css            # CSS file for styling the application
+│   └── style.css           # CSS file for styling the application
 ├── templates/
-│   └── index.html            # HTML template for the main page
-├── snifd_config.json        # Configuration file (created on first run)
-├── snifd_blocked_ips.json   # Blocked IPs file
-├── requirements.txt         # List of dependencies
+│   └── index.html          # HTML template for the main page
+├── snifd_config.json       # Configuration file (created on first run)
+├── snifd_blocked_ips.json  # Blocked IPs file
+├── requirements.txt        # List of dependencies
 └── ids.log                 # Log file for the IDS events
 ```
 
